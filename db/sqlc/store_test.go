@@ -82,22 +82,18 @@ func TestTransferTx(t *testing.T) {
 
 		// check Account
 		fromAccount := result.FromAccount
-		fmt.Println(">> after fromAccount:", fromAccount.ID)
 
 		require.NotEmpty(t, fromAccount)
 		require.Equal(t, account1.ID, fromAccount.ID)
 
 		toAccount := result.ToAccount
-		fmt.Println(">> after ToAccount:", toAccount.ID)
 		require.NotEmpty(t, toAccount)
 		require.Equal(t, account2.ID, toAccount.ID)
 
 		// check account balance
 		diff1 := account1.Balance - fromAccount.Balance
-		fmt.Println(">> acc 1:", account1.Balance, fromAccount.Balance)
 
 		diff2 := toAccount.Balance - account2.Balance
-		fmt.Println(">> acc 2:", toAccount.Balance, account2.Balance)
 		require.Equal(t, diff1, diff2)
 		require.True(t, diff1 > 0)
 		require.True(t, diff1%amount == 0) // 1 * amount, 2 * amount, 3 * amount, ..., n * amount
@@ -114,8 +110,6 @@ func TestTransferTx(t *testing.T) {
 	updatedAccount2, err := store.GetAccount(context.Background(), account2.ID)
 	require.NoError(t, err)
 
-	fmt.Println(">> after:", updatedAccount1.Balance, updatedAccount2.Balance)
-
 	require.Equal(t, account1.Balance-int64(n)*amount, updatedAccount1.Balance)
 	require.Equal(t, account2.Balance+int64(n)*amount, updatedAccount2.Balance)
 }
@@ -125,7 +119,6 @@ func TestTransferTxDeadlock(t *testing.T) {
 	store := NewStore(testDB)
 	account1 := createRandomAccount(t)
 	account2 := createRandomAccount(t)
-	fmt.Println(">> before:", account1.Balance, account2.Balance)
 
 	n := 10
 	amount := int64(10)
@@ -163,7 +156,6 @@ func TestTransferTxDeadlock(t *testing.T) {
 	updatedAccount2, err := store.GetAccount(context.Background(), account2.ID)
 	require.NoError(t, err)
 
-	fmt.Println(">> after:", updatedAccount1.Balance, updatedAccount2.Balance)
 	require.Equal(t, account1.Balance, updatedAccount1.Balance)
 	require.Equal(t, account2.Balance, updatedAccount2.Balance)
 }
