@@ -1,4 +1,6 @@
 {
     "username": "minhdung",
-    "password": "secret"
+    "password": "secret",
+    "full_name": "minhdung",
+    "Email": "dung@gmail.com"
 }
