@@ -3,21 +3,25 @@ package main
 import (
 	"context"
 	"database/sql"
-	"log"
 	"net"
 	"net/http"
+	"os"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/hibiken/asynq"
 	_ "github.com/lib/pq"
 	"github.com/rakyll/statik/fs"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	db "github.com/techschool/simplebank/db/sqlc"
 	_ "github.com/techschool/simplebank/doc/statik"
 	grpc_api "github.com/techschool/simplebank/gapi"
 	"github.com/techschool/simplebank/pb"
 	"github.com/techschool/simplebank/util"
+	"github.com/techschool/simplebank/worker"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -26,47 +30,59 @@ import (
 func main() {
 	config, err := util.LoadConfig(".")
 	if err != nil {
-		log.Fatal("cannot load config")
+		log.Fatal().Msg("cannot load config")
+	}
+
+	if config.Environment == "development" {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
 
 	conn, err := sql.Open(config.DBDriver, config.DBSource)
 	if err != nil {
-		log.Fatal("cannot connect database:", err)
+		log.Fatal().Msg("cannot connect database:")
 	}
 
 	//run fbmigration
 	runDBMigration(config.MigrationURL, config.DBSource)
 
 	store := db.NewStore(conn)
-	go runGatewayServer(config, store)
-	runGrpcServer(config, store)
+
+	redisOpt := asynq.RedisClientOpt{
+		Addr: config.RedisAddress,
+	}
+
+	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
+	go runTaskProcessor(redisOpt, store)
+	go runGatewayServer(config, store, taskDistributor)
+	runGrpcServer(config, store, taskDistributor)
 }
 
-func runGrpcServer(config util.Config, store db.Store) {
-	server, err := grpc_api.NewServer(config, store)
+func runGrpcServer(config util.Config, store db.Store, taskDistributor worker.TaskDistributor) {
+	server, err := grpc_api.NewServer(config, store, taskDistributor)
 	if err != nil {
-		log.Fatal("Can create server:", err)
+		log.Fatal().Msg("Can create server:")
 	}
-	grpcServer := grpc.NewServer()
+	grpcLogger := grpc.UnaryInterceptor(grpc_api.GrpcLogger)
+	grpcServer := grpc.NewServer(grpcLogger)
 	pb.RegisterSimpleBankServer(grpcServer, server)
 	reflection.Register(grpcServer)
 
 	listener, err := net.Listen("tcp", config.GRPCServerAddress)
 	if err != nil {
-		log.Fatal("Can create listener:", err)
+		log.Fatal().Msg("Cannot create listener:")
 	}
 
-	log.Printf("start GRPC server at %s", listener.Addr())
+	log.Info().Msgf("start GRPC server at %s", listener.Addr())
 	err = grpcServer.Serve(listener)
 	if err != nil {
-		log.Fatal("Can start GRPC server")
+		log.Fatal().Msg("Can start GRPC server")
 	}
 }
 
-func runGatewayServer(config util.Config, store db.Store) {
-	server, err := grpc_api.NewServer(config, store)
+func runGatewayServer(config util.Config, store db.Store, taskDistributor worker.TaskDistributor) {
+	server, err := grpc_api.NewServer(config, store, taskDistributor)
 	if err != nil {
-		log.Fatal("Can create server:", err)
+		log.Fatal().Msg("Cannot create server:")
 	}
 	JsonOption := runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
@@ -77,12 +93,13 @@ func runGatewayServer(config util.Config, store db.Store) {
 		},
 	})
 	grpcMux := runtime.NewServeMux(JsonOption)
+	//derived context (ctx) and a cancel function (cancel). This derived context can be used to track and manage the lifecycle of the operation.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	err = pb.RegisterSimpleBankHandlerServer(ctx, grpcMux, server)
 	if err != nil {
-		log.Fatal("Cannot create server:", err)
+		log.Fatal().Msg("Cannot create server:")
 	}
 
 	mux := http.NewServeMux()
@@ -90,7 +107,7 @@ func runGatewayServer(config util.Config, store db.Store) {
 
 	statikFS, err := fs.New()
 	if err != nil {
-		log.Fatal("cannot create statik fs")
+		log.Fatal().Msg("cannot create statik fs")
 	}
 
 	swaggerHandler := http.StripPrefix("/swagger/", http.FileServer(statikFS))
@@ -98,24 +115,34 @@ func runGatewayServer(config util.Config, store db.Store) {
 
 	listener, err := net.Listen("tcp", config.HTTPServerAddress)
 	if err != nil {
-		log.Fatal("Cannot create listener:", err)
+		log.Fatal().Msg("Cannot create listener:")
 	}
 
-	log.Printf("start GRPC server gateway at %s", listener.Addr())
-	err = http.Serve(listener, mux)
+	log.Info().Msgf("start GRPC server gateway at %s", listener.Addr())
+	handler := grpc_api.HttpLogger(mux)
+	err = http.Serve(listener, handler)
 	if err != nil {
-		log.Fatal("Can start HTTP gateway server")
+		log.Fatal().Msg("Can start HTTP gateway server")
 	}
 }
 
 func runDBMigration(migrationURL string, dbSource string) {
 	migration, err := migrate.New(migrationURL, dbSource)
 	if err != nil {
-		log.Fatal("Can screate new migrate instance: ", err)
+		log.Fatal().Msg("Cannot screate new migrate instance")
 	}
 
 	if err = migration.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatal("Failed to run migrate up: ", err)
+		log.Fatal().Msg("Failed to run migrate up: ")
 	}
-	log.Println("db migrated successfully")
+	log.Info().Msg("db migrated successfully")
+}
+
+func runTaskProcessor(redisOpt asynq.RedisClientOpt, store db.Store) {
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store)
+	log.Info().Msg("start Task Processor")
+	err := taskProcessor.Start()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Fail to start Processor")
+	}
 }
