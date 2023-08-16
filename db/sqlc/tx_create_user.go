@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/rs/zerolog/log"
 )
 
 // CreateUserTx performs a money to other
@@ -20,11 +22,11 @@ func (Store *SQLStore) CreateUserTx(ctx context.Context, arg CreateUserTxParams)
 	err := Store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		log.Info().Msg("Dont Create User")
 		res.User, err = q.CreateUser(ctx, arg.CreateUserParams)
 		if err != nil {
 			return err
 		}
-
 		return arg.AfterCreate(res.User)
 	})
 	return res, err

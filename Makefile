@@ -18,16 +18,19 @@ migratedown:
 migratedown1:
 	 migrate -path db/migration -database "${DB_URL}" -verbose down 1
 
+new_migration:
+	migrate create -ext sql -dir db/migration -seq $(name)
+
 db_docs:
 	dbdocs build doc/db.dbml
-
+ 
 db_schema:
 	dbml2sql --postgres -o doc/schema.sql doc/db.dbml
 sqlc: 
 	 sqlc generate
 
 test:
-	go test -v -cover ./...
+	go test -v -cover -short ./...
 
 server:
 	go run main.go
@@ -48,4 +51,4 @@ proto:
 redis:
 	docker run --name redis -p 6379:6379 -d redis:7.2-rc-alpine
 
-.PHONY: postgres createdb createmigratefile dropdb migrateup migrateup1 migratedown migratedown1 db_docs db_schema sqlc test server mock proto redis
+.PHONY: postgres createdb createmigratefile dropdb migrateup migrateup1 migratedown migratedown1 new_migration db_docs db_schema sqlc test server mock proto redis
