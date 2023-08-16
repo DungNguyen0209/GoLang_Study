@@ -75,6 +75,6 @@ func HttpLogger(handler http.Handler) http.Handler {
 			Int("status_code", int(rec.StatusCode)).
 			Str("status_text", http.StatusText(rec.StatusCode)).
 			Dur("duration", duration).
-			Msg("received a gRPC Request")
+			Msg("received a HTTP Request")
 	})
 }

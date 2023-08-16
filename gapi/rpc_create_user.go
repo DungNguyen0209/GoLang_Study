@@ -2,7 +2,6 @@ package grpc_api
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -27,16 +26,29 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Fail to HashPassWord: %s", err)
 	}
-	arg := db.CreateUserParams{
-		Username:       req.GetUsername(),
-		HashedPassword: hashedPassword,
-		FullName:       req.GetFullName(),
-		Email:          req.GetEmail(),
+	arg := db.CreateUserTxParams{
+		CreateUserParams: db.CreateUserParams{
+			Username:       req.GetUsername(),
+			HashedPassword: hashedPassword,
+			FullName:       req.GetFullName(),
+			Email:          req.GetEmail(),
+		},
+		AfterCreate: func(user db.Users) error {
+			taskPayLoad := &worker.PayLoadSendVerifyEmail{
+				Username: user.Username,
+			}
+			opts := []asynq.Option{
+				asynq.MaxRetry(30),
+				// ensure the transaction commited before worker start
+				asynq.ProcessIn(10 * time.Second),
+				asynq.Queue(worker.QueueCritical),
+			}
+			return server.taskDistributor.DistributeTaskVerifyEmail(ctx, taskPayLoad, opts...)
+		},
 	}
 
-	user, err := server.store.CreateUser(ctx, arg)
+	txResult, err := server.store.CreateUserTx(ctx, arg)
 	if err != nil {
-		fmt.Println("sssss")
 		if pgErr, ok := err.(*pq.Error); ok {
 			switch pgErr.Code.Name() {
 			case "unique_violation":
@@ -45,20 +57,9 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 		}
 		return nil, status.Errorf(codes.Internal, "Fail to create user: %s", err)
 	}
-	taskPayLoad := &worker.PayLoadSendVerifyEmail{
-		Username: user.Username,
-	}
-	opts := []asynq.Option{
-		asynq.MaxRetry(30),
-		asynq.ProcessIn(10 * time.Second),
-		asynq.Queue(worker.QueueCritical),
-	}
-	err = server.taskDistributor.DistributeTaskVerifyEmail(ctx, taskPayLoad, opts...)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to distributed task to send verify Email: %s")
-	}
+
 	rsp := &pb.CreateUserResponse{
-		User: ConvertUser(user),
+		User: ConvertUser(txResult.User),
 	}
 	return rsp, nil
 }
