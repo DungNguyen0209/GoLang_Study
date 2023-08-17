@@ -49,12 +49,12 @@ func (server *Server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest)
 			String: hashedPassword,
 			Valid:  true,
 		}
+		arg.PasswordChangedAt = sql.NullTime{
+			Time:  time.Now(),
+			Valid: true,
+		}
 	}
 
-	arg.PasswordChangedAt = sql.NullTime{
-		Time:  time.Now(),
-		Valid: true,
-	}
 	user, err := server.store.UpdateUser(ctx, arg)
 	if err != nil {
 		if err == sql.ErrNoRows {
