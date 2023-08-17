@@ -2,7 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // CreateUserTx performs a money to other
@@ -29,7 +30,7 @@ func (Store *SQLStore) VerifyEmailTx(ctx context.Context, arg VerifyEmailTxParam
 		}
 		user, err := q.UpdateUser(ctx, UpdateUserParams{
 			Username: res.VerifyEmail.Username,
-			IsEmailVerified: sql.NullBool{
+			IsEmailVerified: pgtype.Bool{
 				Bool:  true,
 				Valid: true,
 			},

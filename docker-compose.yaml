@@ -17,6 +17,7 @@ services:
     depends_on:
       - postgres
 # This will override the entrypoint command in the Docker file => ignore entrypoint docker file
+# -- => End of previous comment and start /app/start.sh as new cmd
     entrypoint: ["/app/wait-for.sh", "postgres:5432", "--", "/app/start.sh"]
     command: ["/app/main"]
 

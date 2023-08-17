@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/lib/pq"
 	db "github.com/techschool/simplebank/db/sqlc"
 	"github.com/techschool/simplebank/pb"
 	"github.com/techschool/simplebank/util"
@@ -49,11 +48,8 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 
 	txResult, err := server.store.CreateUserTx(ctx, arg)
 	if err != nil {
-		if pgErr, ok := err.(*pq.Error); ok {
-			switch pgErr.Code.Name() {
-			case "unique_violation":
-				return nil, status.Errorf(codes.AlreadyExists, "username AlreadyExists: %s", err)
-			}
+		if db.ErrorCode(err) == db.Uniqueviolation {
+			return nil, status.Errorf(codes.AlreadyExists, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, "Fail to create user: %s", err)
 	}
