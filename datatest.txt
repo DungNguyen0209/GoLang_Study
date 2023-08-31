@@ -1,6 +1,6 @@
 {
     "username": "minhdung1",
     "password": "secret",
-    "full_name": "minhdung1",
-    "Email": "minhdung1@gmail.com"
+    "full_name": "minh dung",
+    "email": "dung.nhm.hcmut@gmail.com"
 }
