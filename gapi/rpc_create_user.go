@@ -2,11 +2,14 @@ package grpc_api
 
 import (
 	"context"
+	"time"
 
+	"github.com/hibiken/asynq"
 	db "github.com/techschool/simplebank/db/sqlc"
 	"github.com/techschool/simplebank/pb"
 	"github.com/techschool/simplebank/util"
 	"github.com/techschool/simplebank/val"
+	"github.com/techschool/simplebank/worker"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,17 +33,16 @@ func (server *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest)
 			Email:          req.GetEmail(),
 		},
 		AfterCreate: func(user db.Users) error {
-			// taskPayLoad := &worker.PayLoadSendVerifyEmail{
-			// 	Username: user.Username,
-			// }
-			// opts := []asynq.Option{
-			// 	asynq.MaxRetry(30),
-			// 	// ensure the transaction commited before worker start
-			// 	asynq.ProcessIn(10 * time.Second),
-			// 	asynq.Queue(worker.QueueCritical),
-			// }
-			// return server.taskDistributor.DistributeTaskVerifyEmail(ctx, taskPayLoad, opts...)
-			return nil
+			taskPayLoad := &worker.PayLoadSendVerifyEmail{
+				Username: user.Username,
+			}
+			opts := []asynq.Option{
+				asynq.MaxRetry(30),
+				// ensure the transaction commited before worker start
+				asynq.ProcessIn(10 * time.Second),
+				asynq.Queue(worker.QueueCritical),
+			}
+			return server.taskDistributor.DistributeTaskVerifyEmail(ctx, taskPayLoad, opts...)
 		},
 	}
 

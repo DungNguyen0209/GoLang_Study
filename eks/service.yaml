@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-bank-api-service-1
+spec:
+  selector:
+    app: simple-bank-api
+  ports:
+    - name: http-gateway
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+    - name: grpc
+      protocol: TCP
+      port: 90
+      targetPort: 9090
+  type: ClusterIP
