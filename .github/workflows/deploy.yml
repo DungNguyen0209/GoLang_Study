@@ -49,6 +49,8 @@ jobs:
 
     - name: deployment on EKS
       run: |
-        kubectl apply -f /home/jackie/Projects/demo/simplebank/eks/aws-auth.yaml
-        kubectl apply -f /home/jackie/Projects/demo/simplebank/eks/deployment.yaml
-        kubectl apply -f /home/jackie/Projects/demo/simplebank/eks/service.yaml
+        pwd
+        ls
+        kubectl apply -f ./eks/aws-auth.yaml
+        kubectl apply -f ./eks/deployment.yaml
+        kubectl apply -f ./eks/service.yaml
