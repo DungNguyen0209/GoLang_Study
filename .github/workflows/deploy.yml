@@ -43,11 +43,12 @@ jobs:
         docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG -t $REGISTRY/$REPOSITORY:latest .
         docker push -a $REGISTRY/$REPOSITORY
 
+    # required to interact with the "simple_bank" EKS cluster => allows to use tools like "kubectl"
     - name: Update kube config
       run: aws eks update-kubeconfig --name simple_bank --region ap-southeast-1
 
     - name: deployment on EKS
       run: |
-        kubectl apply -f ../eks/aws-auth.yaml
-        kubectl apply -f ../eks/deployment.yaml
-        kubectl apply -f ../eks/service.yaml
+        kubectl apply -f /home/jackie/Projects/demo/simplebank/eks/aws-auth.yaml
+        kubectl apply -f /home/jackie/Projects/demo/simplebank/eks/deployment.yaml
+        kubectl apply -f /home/jackie/Projects/demo/simplebank/eks/service.yaml
